@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mr_plot"
+version = "0.1.0"
+description = "A tool to plot merge requests from GitLab projects"
+authors = [{name = "Your Name", email = "your.email@example.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "python-gitlab==3.15.0",
+    "pandas==2.0.3",
+    "matplotlib==3.7.2",
+]
+
+[project.scripts]
+mr_plot = "mr_plot:main"
+
+[tool.setuptools.packages.find]
+where = ["source"]
+
+[tool.setuptools]
+package-data = {"mr_plot" = ["py.typed"]}
