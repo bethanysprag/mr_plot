@@ -1,49 +1,103 @@
 import gitlab
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime import datetime
+import argparse
+from typing import List
 
-# Configuration: Replace with your GitLab URL and access token
-GITLAB_URL = "https://gitlab.scitec.com"  # Replace with your GitLab instance URL
-ACCESS_TOKEN = "your_access_token_here"  # Replace with your GitLab personal access token
-PROJECT_ID = "your_project_id_here"  # Replace with the project ID or path
+def initialize_gitlab(url: str, token: str) -> gitlab.Gitlab:
+    """
+    Initialize a GitLab client.
 
-# Initialize GitLab connection
-gl = gitlab.Gitlab(GITLAB_URL, private_token=ACCESS_TOKEN)
+    Args:
+        url (str): The GitLab API URL.
+        token (str): The personal access token for authentication.
 
-# Fetch the project
-project = gl.projects.get(PROJECT_ID)
+    Returns:
+        gitlab.Gitlab: An authenticated GitLab client.
+    """
+    return gitlab.Gitlab(url, private_token=token)
 
-# Fetch the merge requests (pagination handles large responses)
-merge_requests = project.mergerequests.list(all=True)
+def fetch_merge_requests(project: gitlab.v4.objects.Project) -> List[gitlab.v4.objects.ProjectMergeRequest]:
+    """
+    Fetch all merge requests for a given project.
 
-# Prepare data for plotting
-timestamps = []
+    Args:
+        project (gitlab.v4.objects.Project): The GitLab project object.
 
-for mr in merge_requests:
-    created_at = mr.created_at
-    # Convert the created_at string to a datetime object
-    created_datetime = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%S.%fZ")
-    timestamps.append(created_datetime)
+    Returns:
+        List[gitlab.v4.objects.ProjectMergeRequest]: A list of merge request objects.
+    """
+    return project.mergerequests.list(all=True)
 
-# Create a DataFrame from the timestamps
-df = pd.DataFrame(timestamps, columns=["created_at"])
+def process_merge_requests(merge_requests: List[gitlab.v4.objects.ProjectMergeRequest]) -> pd.DataFrame:
+    """
+    Process merge requests and extract creation timestamps.
 
-# Round down each datetime to the nearest 24-hour period
-df['date'] = df['created_at'].dt.floor('D')
+    Args:
+        merge_requests (List[gitlab.v4.objects.ProjectMergeRequest]): A list of merge request objects.
 
-# Count the number of MRs per day
-merge_requests_per_day = df['date'].value_counts().sort_index()
+    Returns:
+        pd.DataFrame: A DataFrame containing creation timestamps of merge requests.
+    """
+    timestamps = []
+    for mr in merge_requests:
+        created_datetime = datetime.strptime(mr.created_at, "%Y-%m-%dT%H:%M:%S.%fZ")
+        timestamps.append(created_datetime)
+    return pd.DataFrame(timestamps, columns=["created_at"])
 
-# Plotting
-plt.figure(figsize=(10, 6))
-merge_requests_per_day.plot(kind='bar', color='skyblue')
-plt.title('Merge Requests Per Day')
-plt.xlabel('Date')
-plt.ylabel('Number of Merge Requests')
-plt.xticks(rotation=45, ha="right")
-plt.tight_layout()
+def prepare_data(df: pd.DataFrame) -> pd.Series:
+    """
+    Prepare data for plotting by grouping merge requests by day.
 
-# Show the plot
-plt.show()
+    Args:
+        df (pd.DataFrame): A DataFrame containing merge request creation timestamps.
 
+    Returns:
+        pd.Series: A Series containing the count of merge requests per day.
+    """
+    df['date'] = df['created_at'].dt.floor('D')
+    return df['date'].value_counts().sort_index()
+
+def plot_merge_requests(merge_requests_per_day: pd.Series) -> None:
+    """
+    Plot the number of merge requests per day.
+
+    Args:
+        merge_requests_per_day (pd.Series): A Series containing the count of merge requests per day.
+    """
+    plt.figure(figsize=(10, 6))
+    merge_requests_per_day.plot(kind='bar', color='skyblue')
+    plt.title('Merge Requests Per Day')
+    plt.xlabel('Date')
+    plt.ylabel('Number of Merge Requests')
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.show()
+
+def main(gitlab_url: str, access_token: str, project_id: str) -> None:
+    """
+    Main function to orchestrate the merge request plotting process.
+
+    Args:
+        gitlab_url (str): The GitLab API URL.
+        access_token (str): The personal access token for authentication.
+        project_id (str): The ID or path of the GitLab project.
+    """
+    gl = initialize_gitlab(gitlab_url, access_token)
+    project = gl.projects.get(project_id)
+    merge_requests = fetch_merge_requests(project)
+    df = process_merge_requests(merge_requests)
+    merge_requests_per_day = prepare_data(df)
+    plot_merge_requests(merge_requests_per_day)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Plot merge requests per day for a GitLab project.")
+    parser.add_argument("--url", default="https://gitlab.scitec.com/api/v4", 
+                        help="GitLab API URL (default: https://gitlab.scitec.com/api/v4)")
+    parser.add_argument("--token", required=True, help="GitLab personal access token")
+    parser.add_argument("--project", required=True, help="GitLab project ID or path")
+    
+    args = parser.parse_args()
+    
+    main(args.url, args.token, args.project)
